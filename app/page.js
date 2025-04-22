@@ -3,21 +3,25 @@
 import { useState } from "react";
 
 const COUNTRY_MAPPING = {
-  us: "United States",
-  gb: "United Kingdom",
-  ca: "Canada",
-  au: "Australia",
-  fr: "France",
-  de: "Germany",
   jp: "Japan",
-  it: "Italy",
+  fr: "France",
+  us: "United States",
+  de: "Germany",
   es: "Spain",
-  br: "Brazil",
+  it: "Italy",
+  gb: "United Kingdom",
+  pl: "Poland",
+  be: "Belgium",
+  ca: "Canada",
+  nl: "Netherlands",
   mx: "Mexico",
-  in: "India",
-  cn: "China",
-  kr: "South Korea",
-  ru: "Russia",
+  ch: "Switzerland",
+  pt: "Portugal",
+  ie: "Ireland",
+  gr: "Greece",
+  at: "Austria",
+  co: "Colombia",
+  hu: "Hungary"
 };
 
 const COUNTRY_CODE_TO_NAME = Object.entries(COUNTRY_MAPPING).reduce((acc, [code, name]) => {
