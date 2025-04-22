@@ -15,7 +15,6 @@ export async function POST(request) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const result = await model.generateContent([
-      "Provide concise and insightful analysis based on the reviews provided.",
       `Here are the reviews to analyze:\n\n${formattedReviews}\n\nQuestion: ${prompt}`
     ]);
 
