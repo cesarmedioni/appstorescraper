@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 const COUNTRY_MAPPING = {
   jp: "Japan",
@@ -35,6 +36,7 @@ const COUNTRY_NAME_TO_CODE = Object.entries(COUNTRY_MAPPING).reduce((acc, [code,
 }, {});
 
 export default function Home() {
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     appName: "",
     appId: "",
@@ -49,6 +51,62 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [isProcessingPrompt, setIsProcessingPrompt] = useState(false);
+
+  // Handle URL parameters to pre-fill form
+  useEffect(() => {
+    const urlParam = searchParams.get('url');
+    const reviewsParam = searchParams.get('reviews');
+    
+    if (urlParam) {
+      // Pre-fill the URL and trigger the auto-fill logic
+      const processUrl = async () => {
+        setFormData(prev => ({ 
+          ...prev, 
+          appStoreUrl: urlParam,
+          reviewCount: reviewsParam || ""
+        }));
+        
+        try {
+          const urlObj = new URL(urlParam);
+          const pathParts = urlObj.pathname.split('/');
+          const countryCode = pathParts[1];
+          const appId = extractAppId(urlParam);
+          
+          setIsLoading(true);
+          const appDetails = await fetchAppDetails(appId);
+          
+          setFormData(prev => ({
+            ...prev,
+            appId: appId,
+            appName: appDetails.sellerName || "",
+            country: countryCode,
+            reviewCount: reviewsParam || "",
+            appStoreUrl: urlParam
+          }));
+        } catch (error) {
+          console.error('Error processing URL parameter:', error);
+          setError("Error processing pre-filled URL");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      processUrl();
+    } else {
+      // Clear form data when no URL parameters (e.g., when clicking Home)
+      setFormData({
+        appName: "",
+        appId: "",
+        country: "",
+        reviewCount: "",
+        appStoreUrl: ""
+      });
+      setReviews([]);
+      setError("");
+      setPrompt("");
+      setAiResponse("");
+    }
+  }, [searchParams]);
 
   const fetchAppDetails = async (appId) => {
     try {
@@ -230,17 +288,8 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-            App Store Reviews Scraper
-          </h1>
-          <p className="text-gray-600 dark:text-gray-300">
-            Enter the App Store URL to fetch reviews for your application
-          </p>
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-8">
           <form onSubmit={handleSubmit} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm">
             <div>
