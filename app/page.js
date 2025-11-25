@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 const COUNTRY_MAPPING = {
@@ -35,7 +35,7 @@ const COUNTRY_NAME_TO_CODE = Object.entries(COUNTRY_MAPPING).reduce((acc, [code,
   return acc;
 }, {});
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     appName: "",
@@ -532,5 +532,21 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white"></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
