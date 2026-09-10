@@ -1,29 +1,80 @@
 "use client";
 
 import { useState } from "react";
+import { COUNTRY_MAPPING } from "../lib/countries";
+import { extractAppId, fetchAppDetails } from "../lib/appStore";
 
-const BEREAL_APP_ID = "1459645446";
-const COUNTRIES = ["us", "fr", "jp", "es", "de", "be", "it"];
-const COUNTRY_NAMES = {
-  us: "United States",
-  fr: "France",
-  jp: "Japan",
-  es: "Spain",
-  de: "Germany",
-  be: "Belgium",
-  it: "Italy"
-};
+export default function BugReport() {
+  const [appStoreUrl, setAppStoreUrl] = useState("");
+  const [appName, setAppName] = useState("");
+  const [appId, setAppId] = useState("");
+  const [selectedCountries, setSelectedCountries] = useState([]);
+  const [timeRange, setTimeRange] = useState("weekly"); // "weekly" or "monthly"
 
-export default function BeRealBugReport() {
   const [reviews, setReviews] = useState([]);
+  const [isLoadingApp, setIsLoadingApp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [prompt, setPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [isProcessingPrompt, setIsProcessingPrompt] = useState(false);
-  const [timeRange, setTimeRange] = useState("weekly"); // "weekly" or "monthly"
 
-  const fetchReviews = async () => {
+  const handleUrlChange = async (e) => {
+    const url = e.target.value;
+    setAppStoreUrl(url);
+    setError("");
+    setAppName("");
+    setAppId("");
+
+    if (!url) return;
+
+    try {
+      const id = extractAppId(url);
+      setIsLoadingApp(true);
+      const details = await fetchAppDetails(id);
+
+      setAppId(id);
+      setAppName(details.trackName || details.sellerName || "");
+
+      // Pre-select the country present in the URL, if any
+      const countryCode = new URL(url).pathname.split('/')[1];
+      if (COUNTRY_MAPPING[countryCode]) {
+        setSelectedCountries(prev =>
+          prev.includes(countryCode) ? prev : [...prev, countryCode]
+        );
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      if (error.message.includes("App ID")) {
+        setError("Invalid App Store URL format. Please ensure it contains an app ID.");
+      } else if (error.message === "No app found") {
+        setError("No app found with this ID. Please check the URL and try again.");
+      } else {
+        setError("Invalid App Store URL or error fetching app details");
+      }
+    } finally {
+      setIsLoadingApp(false);
+    }
+  };
+
+  const toggleCountry = (code) => {
+    setSelectedCountries(prev =>
+      prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
+    );
+  };
+
+  const fetchReviews = async (e) => {
+    e.preventDefault();
+
+    if (!appId) {
+      setError("Enter a valid App Store URL first.");
+      return;
+    }
+    if (selectedCountries.length === 0) {
+      setError("Select at least one country.");
+      return;
+    }
+
     setIsLoading(true);
     setError("");
     setReviews([]);
@@ -35,11 +86,10 @@ export default function BeRealBugReport() {
       const daysToSubtract = timeRange === "weekly" ? 7 : 30;
       targetDate.setDate(targetDate.getDate() - daysToSubtract);
 
-      // Fetch reviews for all countries in parallel
-      const fetchPromises = COUNTRIES.map(async (country) => {
+      const fetchPromises = selectedCountries.map(async (country) => {
         try {
           const response = await fetch(
-            `/api/reviews-v2?appId=${BEREAL_APP_ID}&country=${country}&sort=mostRecent&num=100`
+            `/api/reviews-v2?appId=${appId}&country=${country}&sort=mostRecent&num=100`
           );
 
           if (!response.ok) {
@@ -48,25 +98,19 @@ export default function BeRealBugReport() {
           }
 
           const data = await response.json();
-          
+
           if (data.error) {
             console.error(`Error for ${country}:`, data.error);
             return [];
           }
 
-          // Filter reviews from the target date and add country info
-          const filteredReviews = (data.reviews || [])
-            .filter(review => {
-              const reviewDate = new Date(review.date);
-              return reviewDate >= targetDate;
-            })
+          return (data.reviews || [])
+            .filter(review => new Date(review.date) >= targetDate)
             .map(review => ({
               ...review,
-              country: COUNTRY_NAMES[country],
+              country: COUNTRY_MAPPING[country],
               countryCode: country
             }));
-
-          return filteredReviews;
         } catch (error) {
           console.error(`Error fetching reviews for ${country}:`, error);
           return [];
@@ -76,7 +120,6 @@ export default function BeRealBugReport() {
       const allCountryReviews = await Promise.all(fetchPromises);
       const combinedReviews = allCountryReviews.flat();
 
-      // Sort by date (most recent first)
       combinedReviews.sort((a, b) => new Date(b.date) - new Date(a.date));
 
       setReviews(combinedReviews);
@@ -86,8 +129,8 @@ export default function BeRealBugReport() {
         setError(`No reviews found in the last ${timeRangeText} for the selected countries.`);
       }
     } catch (error) {
-      console.error('Error fetching weekly reviews:', error);
-      setError("Failed to fetch weekly reviews. Please try again.");
+      console.error('Error fetching reviews:', error);
+      setError("Failed to fetch reviews. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -116,51 +159,156 @@ export default function BeRealBugReport() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to get AI response');
+        throw new Error(data.error || 'Failed to get AI response');
       }
 
-      const data = await response.json();
       setAiResponse(data.response);
     } catch (error) {
       console.error('Error processing prompt:', error);
-      setError('Failed to process prompt. Please try again.');
+      setError(error.message || 'Failed to process prompt. Please try again.');
     } finally {
       setIsProcessingPrompt(false);
     }
   };
 
+  const selectedCountryNames = selectedCountries
+    .map(code => COUNTRY_MAPPING[code])
+    .join(", ");
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center gap-4">
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              disabled={isLoading}
-              className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
-            >
-              <option value="weekly">Weekly (7 days)</option>
-              <option value="monthly">Monthly (30 days)</option>
-            </select>
-            <button
-              onClick={fetchReviews}
-              disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-            >
-              {isLoading ? "Generating Report..." : "Generate Bug Report"}
-            </button>
+      <div className="max-w-7xl mx-auto space-y-8">
+        <form onSubmit={fetchReviews} className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-3">
+              <label htmlFor="appStoreUrl" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                App Store URL
+              </label>
+              <input
+                type="url"
+                id="appStoreUrl"
+                value={appStoreUrl}
+                onChange={handleUrlChange}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="https://apps.apple.com/fr/app/bereal-tes-amis-pour-de-vrai/id1459645446"
+                required
+              />
+              {isLoadingApp && (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Loading app details...
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="appName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                App Name
+              </label>
+              <input
+                type="text"
+                id="appName"
+                value={appName}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                placeholder="App name will be auto-filled"
+                readOnly
+              />
+            </div>
+
+            <div>
+              <label htmlFor="appId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                App ID
+              </label>
+              <input
+                type="text"
+                id="appId"
+                value={appId}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                placeholder="App ID will be auto-filled"
+                readOnly
+              />
+            </div>
+
+            <div>
+              <label htmlFor="timeRange" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Time Range
+              </label>
+              <select
+                id="timeRange"
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                disabled={isLoading}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+              >
+                <option value="weekly">Weekly (7 days)</option>
+                <option value="monthly">Monthly (30 days)</option>
+              </select>
+            </div>
           </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Countries{selectedCountries.length > 0 && ` (${selectedCountries.length})`}
+              </label>
+              <div className="flex gap-3 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCountries(Object.keys(COUNTRY_MAPPING))}
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCountries([])}
+                  className="text-gray-500 dark:text-gray-400 hover:underline"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {Object.entries(COUNTRY_MAPPING).map(([code, name]) => (
+                <label
+                  key={code}
+                  className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
+                    selectedCountries.includes(code)
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30"
+                      : "border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedCountries.includes(code)}
+                    onChange={() => toggleCountry(code)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          >
+            {isLoading ? "Generating Report..." : "Generate Bug Report"}
+          </button>
+
           {isLoading && (
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Fetching reviews from US, France, Japan, Spain, Germany, Belgium, and Italy...
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Fetching reviews from {selectedCountryNames}...
             </p>
           )}
-        </div>
+        </form>
 
         {error && (
-          <div className="mb-8 bg-red-50 dark:bg-red-900 p-4 rounded-lg">
+          <div className="bg-red-50 dark:bg-red-900 p-4 rounded-lg">
             <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
@@ -170,10 +318,11 @@ export default function BeRealBugReport() {
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
               <div className="mb-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Found <span className="font-semibold text-gray-900 dark:text-gray-100">{reviews.length}</span> reviews from the last {timeRange === "weekly" ? "7 days" : "30 days"}
+                  Found <span className="font-semibold text-gray-900 dark:text-gray-100">{reviews.length}</span> reviews for{" "}
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">{appName || appId}</span> from the last {timeRange === "weekly" ? "7 days" : "30 days"}
                 </p>
               </div>
-              
+
               {/* Prompt Shortcuts */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -310,4 +459,3 @@ export default function BeRealBugReport() {
     </div>
   );
 }
-

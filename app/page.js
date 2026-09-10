@@ -2,38 +2,8 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-
-const COUNTRY_MAPPING = {
-  jp: "Japan",
-  fr: "France",
-  us: "United States",
-  de: "Germany",
-  es: "Spain",
-  it: "Italy",
-  gb: "United Kingdom",
-  pl: "Poland",
-  be: "Belgium",
-  ca: "Canada",
-  nl: "Netherlands",
-  mx: "Mexico",
-  ch: "Switzerland",
-  pt: "Portugal",
-  ie: "Ireland",
-  gr: "Greece",
-  at: "Austria",
-  co: "Colombia",
-  hu: "Hungary"
-};
-
-const COUNTRY_CODE_TO_NAME = Object.entries(COUNTRY_MAPPING).reduce((acc, [code, name]) => {
-  acc[code] = name;
-  return acc;
-}, {});
-
-const COUNTRY_NAME_TO_CODE = Object.entries(COUNTRY_MAPPING).reduce((acc, [code, name]) => {
-  acc[name] = code;
-  return acc;
-}, {});
+import { COUNTRY_MAPPING } from "./lib/countries";
+import { extractAppId, fetchAppDetails } from "./lib/appStore";
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -107,37 +77,6 @@ function HomeContent() {
       setAiResponse("");
     }
   }, [searchParams]);
-
-  const fetchAppDetails = async (appId) => {
-    try {
-      const response = await fetch(`/api/app-details?id=${appId}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      
-      if (data.results && data.results.length > 0) {
-        return data.results[0];
-      }
-      throw new Error("No app found");
-    } catch (error) {
-      console.error('Error fetching app details:', error);
-      throw error;
-    }
-  };
-
-  const extractAppId = (url) => {
-    // Get the last part of the URL path
-    const pathParts = url.split('/');
-    const lastPart = pathParts[pathParts.length - 1];
-    
-    // Extract just the numeric ID
-    const numericId = lastPart.match(/\d+/);
-    if (numericId) {
-      return numericId[0];
-    }
-    throw new Error("Could not extract App ID from URL");
-  };
 
   const handleUrlChange = async (e) => {
     const url = e.target.value;
@@ -273,15 +212,16 @@ function HomeContent() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to get AI response');
+        throw new Error(data.error || 'Failed to get AI response');
       }
 
-      const data = await response.json();
       setAiResponse(data.response);
     } catch (error) {
       console.error('Error processing prompt:', error);
-      setError('Failed to process prompt. Please try again.');
+      setError(error.message || 'Failed to process prompt. Please try again.');
     } finally {
       setIsProcessingPrompt(false);
     }
