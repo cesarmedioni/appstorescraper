@@ -1,0 +1,21 @@
+export const COUNTRY_MAPPING = {
+  jp: "Japan",
+  fr: "France",
+  us: "United States",
+  de: "Germany",
+  es: "Spain",
+  it: "Italy",
+  gb: "United Kingdom",
+  pl: "Poland",
+  be: "Belgium",
+  ca: "Canada",
+  nl: "Netherlands",
+  mx: "Mexico",
+  ch: "Switzerland",
+  pt: "Portugal",
+  ie: "Ireland",
+  gr: "Greece",
+  at: "Austria",
+  co: "Colombia",
+  hu: "Hungary"
+};
